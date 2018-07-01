@@ -97,7 +97,7 @@ class FunctionsBoxes:
 
 
 def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, decay_rate,
-                   batch_size, convergence_criteria, v_data, v_labels):
+                   batch_size, convergence_criteria, gamma ,v_data, v_labels):
     """
     We assume that the function can receive dynamic data size
     :param loss_function:
@@ -109,6 +109,7 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
     :param batch_size:
     :return:
     """
+    m = np.zeros([1, t_data.shape[1]], dtype=np.double)
     loss_history = []
     accuracy_history = {"test_set": [],
                         "validation_set": []
@@ -135,7 +136,12 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
             prev_params = loss_function.get_params_as_matrix()
 
             # Parameter update, change mto momentum\adaGrad
-            updated_params = prev_params-learning_rate*grad
+
+            #updated_params = prev_params-learning_rate*grad
+
+            # Momentum update
+            m = gamma * m + learning_rate*grad
+            updated_params = prev_params - m
 
             loss_function.update_params(updated_params)
             loss_history.append(cur_loss)

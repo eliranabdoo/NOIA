@@ -43,6 +43,7 @@ def main():
     CONVERGENCE_CRITERIA = 0.1
     DECAY_RATE = 0.1
     MAX_ITER = 1000
+    GAMMA = 0.8
 
     sm = LonelySoftmaxWithReg(dim=t_data.shape[1], num_labels=num_labels, reg_param=REG_PARAM)
 
@@ -58,6 +59,7 @@ def main():
                                                     batch_size=BATCH_SIZE,
                                                     max_iter=MAX_ITER,
                                                     learning_rate=LEARNING_RATE,
+                                                    gamma=GAMMA,
                                                     v_data=v_data,
                                                     v_labels=v_labels)
 
