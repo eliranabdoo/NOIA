@@ -3,12 +3,13 @@ import tables
 import sys,os
 import scipy.io
 from softmax import LonelySoftmaxWithReg, train_with_sgd
+import matplotlib.pyplot as plt
 from softmax import FunctionsBoxes
+from softmax import accuracy
 from gradient_checks import grad_check_sparse
 
-def accuracy(predictions, labels):
-  return (100.0 * np.sum(predictions ==labels)
-          / predictions.shape[0])
+
+
 
 
 def load_data(path):
@@ -45,24 +46,37 @@ def main():
 
     sm = LonelySoftmaxWithReg(dim=t_data.shape[1], num_labels=num_labels, reg_param=REG_PARAM)
 
-
-
-    loss_history = train_with_sgd(sm, X=t_data, y=t_labels, convergence_criteria=CONVERGENCE_CRITERIA,
-                                  decay_rate=DECAY_RATE,
-                                  batch_size=BATCH_SIZE,
-                                  max_iter=MAX_ITER,
-                                  learning_rate=LEARNING_RATE)
-    print(loss_history)
-
     # Perform numerical vs analytical gradient check
     loss, grad = sm.calc_loss_and_grad_for_batch(v_data, v_labels)
     f = lambda w: \
-    FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(v_data), v_labels, REG_PARAM)[0]
+        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(v_data), v_labels, REG_PARAM)[0]
     grad_err = grad_check_sparse(f, sm.get_params_as_matrix(), grad, 10)
     assert grad_err < 0.1
 
-    print(accuracy(sm.predict(v_data), v_labels))
-    print(accuracy(sm.predict(t_data), t_labels))
+    loss_history, accuracy_history = train_with_sgd(sm, t_data=t_data, t_labels=t_labels, convergence_criteria=CONVERGENCE_CRITERIA,
+                                                    decay_rate=DECAY_RATE,
+                                                    batch_size=BATCH_SIZE,
+                                                    max_iter=MAX_ITER,
+                                                    learning_rate=LEARNING_RATE,
+                                                    v_data=v_data,
+                                                    v_labels=v_labels)
+
+    iterations = list(range(0, len(accuracy_history['test_set'])))
+    test_accs = accuracy_history['test_set']
+    validation_accs = accuracy_history['validation_set']
+
+    plt.subplot(2, 1, 1)
+    plt.plot(iterations, test_accs, 'o-')
+    plt.title('Accuracies')
+    plt.ylabel('test accuracy')
+
+    plt.subplot(2, 1, 2)
+    plt.plot(iterations, validation_accs, '.-')
+    plt.xlabel('time (s)')
+    plt.ylabel('validation accuracy')
+
+    plt.show()
+
 
 if __name__ == "__main__":
     main()

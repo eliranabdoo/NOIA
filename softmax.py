@@ -1,5 +1,8 @@
 import numpy as np
 
+def accuracy(predictions, labels):
+  return (100.0 * np.sum(predictions ==labels)
+          / predictions.shape[0])
 
 class LossFunction:
     def calc_loss_and_grad_for_batch(self, X, y):
@@ -93,13 +96,13 @@ class FunctionsBoxes:
         return loss, dW
 
 
-def train_with_sgd(loss_function, X, y, max_iter, learning_rate, decay_rate,
-        batch_size, convergence_criteria):
+def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, decay_rate,
+                   batch_size, convergence_criteria, v_data, v_labels):
     """
     We assume that the function can receive dynamic data size
     :param loss_function:
-    :param X: The data set (ideally should be loaded to RAM on demand)
-    :param y: The corresponding labels
+    :param t_data: The data set (ideally should be loaded to RAM on demand)
+    :param t_labels: The corresponding labels
     :param max_iter:
     :param learning_rate:
     :param decay_rate:
@@ -107,8 +110,11 @@ def train_with_sgd(loss_function, X, y, max_iter, learning_rate, decay_rate,
     :return:
     """
     loss_history = []
+    accuracy_history = {"test_set": [],
+                        "validation_set": []
+                        }
     cur_learning_rate = learning_rate
-    num_train, dim = X.shape
+    num_train, dim = t_data.shape
     num_of_batches = int(np.ceil(num_train / batch_size))
     cur_loss = 0.0
     for i in range(0, max_iter):
@@ -117,13 +123,13 @@ def train_with_sgd(loss_function, X, y, max_iter, learning_rate, decay_rate,
 
         cur_learning_rate = update_learning_rate(cur_learning_rate, decay_rate, i)
 
-        assert len(X) == len(y)
+        assert len(t_data) == len(t_labels)
         p = np.random.permutation(num_train)
-        X = X[p]
-        y = y[p]
+        t_data = t_data[p]
+        t_labels = t_labels[p]
         for j in range(0, num_of_batches):
-            x_batch = X[j*batch_size:(j+1)*batch_size]
-            y_batch = y[j*batch_size:(j+1)*batch_size]
+            x_batch = t_data[j * batch_size:(j + 1) * batch_size]
+            y_batch = t_labels[j * batch_size:(j + 1) * batch_size]
 
             cur_loss, grad = loss_function.calc_loss_and_grad_for_batch(x_batch, y_batch)
             prev_params = loss_function.get_params_as_matrix()
@@ -134,10 +140,19 @@ def train_with_sgd(loss_function, X, y, max_iter, learning_rate, decay_rate,
             loss_function.update_params(updated_params)
             loss_history.append(cur_loss)
 
-        if np.abs(loss_history[-1]-loss_history[-2]) < convergence_criteria:
-            break
+        test_set_accuracy = accuracy(loss_function.predict(t_data), t_labels)
+        validation_set_accuracy = accuracy(loss_function.predict(v_data), v_labels)
 
-    return loss_history
+        print("After %d epochs, train set accuracy is %d" % (i, test_set_accuracy))
+        print("After %d epochs, validation set accuracy is %d" % (i, validation_set_accuracy))
+
+        accuracy_history['test_set'].append(test_set_accuracy)
+        accuracy_history['validation_set'].append(validation_set_accuracy)
+
+        #if np.abs(loss_history[-1]-loss_history[-2]) < convergence_criteria:
+        #    break
+
+    return loss_history, accuracy_history
 
 
 def update_learning_rate(learning_rate, decay_rate, iteration):
