@@ -71,28 +71,6 @@ class FunctionsBoxes:
         loss /= num_train
         loss += reg * np.sum(W * W)
 
-
-
-
-        """numerical_stab_factors = np.exp(-1.0 * np.max(scores, axis=1))
-        scores_sums = np.sum(scores_exp, axis=1)
-
-        a_tag = (numerical_stab_factors * scores_exp.T)
-        b_tag = (scores_sums * numerical_stab_factors)
-        #  print (a_tag[1], b_tag[1], (a_tag/b_tag.T)[1])
-        class_scores = scores_exp[np.arange(len(scores_exp)), y.T]
-        a = np.multiply(scores_sums, numerical_stab_factors.T)
-        b = (np.ones(num_train)) / (np.multiply(numerical_stab_factors, class_scores))
-        total_score_mat = (a_tag / b_tag).T
-        labels_mat = np.zeros_like(scores)
-        labels_mat[np.arange(0, num_train), y] = 1
-        dW += (X.T).dot(total_score_mat - labels_mat)
-        dW /= num_train
-        loss = np.sum(np.log(a) + np.log(b))
-        loss /= num_train
-        loss += reg * np.sum(W * W)
-        dW += (2 * reg) * W"""
-
         return loss, dW
 
 
@@ -122,7 +100,7 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
         x_batch = None
         y_batch = None
 
-        cur_learning_rate = update_learning_rate(cur_learning_rate, decay_rate, i)
+        cur_learning_rate = update_learning_rate_step(learning_rate, 10, i, decay_rate)
 
         assert len(t_data) == len(t_labels)
         p = np.random.permutation(num_train)
@@ -140,7 +118,7 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
             #updated_params = prev_params-learning_rate*grad
 
             # Momentum update
-            m = gamma * m + learning_rate*grad
+            m = gamma * m + cur_learning_rate*grad
             updated_params = prev_params - m
 
             loss_function.update_params(updated_params)
@@ -149,8 +127,8 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
         test_set_accuracy = accuracy(loss_function.predict(t_data), t_labels)
         validation_set_accuracy = accuracy(loss_function.predict(v_data), v_labels)
 
-        print("After %d epochs, train set accuracy is %d" % (i, test_set_accuracy))
-        print("After %d epochs, validation set accuracy is %d" % (i, validation_set_accuracy))
+        print("After %d epochs, train set accuracy is %d" % (i+1, test_set_accuracy))
+        print("After %d epochs, validation set accuracy is %d" % (i+1, validation_set_accuracy))
 
         accuracy_history['test_set'].append(test_set_accuracy)
         accuracy_history['validation_set'].append(validation_set_accuracy)
@@ -161,8 +139,14 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
     return loss_history, accuracy_history
 
 
-def update_learning_rate(learning_rate, decay_rate, iteration):
+def update_learning_rate_simple(learning_rate, decay_rate, iteration):
     if iteration < 100:
         return 0.01
     else:
         return 0.001
+
+
+def update_learning_rate_step(initial_learning_rate, interval, iteration, drop_rate):
+    return initial_learning_rate * np.power(drop_rate,
+                                     np.floor((1 + iteration) / interval))
+
