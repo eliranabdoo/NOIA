@@ -37,13 +37,13 @@ def main():
     print(np.std(t_data, axis=0), np.mean(t_data, axis=0))
 
     # Hyper parameters
-    REG_PARAM = 2e1
+    REG_PARAM = 0
     LEARNING_RATE = 0.01
     BATCH_SIZE = 100
     CONVERGENCE_CRITERIA = 0.1
-    DECAY_RATE = 0.1
-    MAX_ITER = 1000
-    GAMMA = 0.8
+    DECAY_RATE = 10
+    MAX_ITER = 100
+    GAMMA = 0.7
 
     sm = LonelySoftmaxWithReg(dim=t_data.shape[1], num_labels=num_labels, reg_param=REG_PARAM)
 
@@ -62,7 +62,7 @@ def main():
                                                     gamma=GAMMA,
                                                     v_data=v_data,
                                                     v_labels=v_labels)
-
+    print(loss_history)
     iterations = list(range(0, len(accuracy_history['test_set'])))
     test_accs = accuracy_history['test_set']
     validation_accs = accuracy_history['validation_set']
