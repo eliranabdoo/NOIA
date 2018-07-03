@@ -15,6 +15,15 @@ class LossFunction:
         pass
 
 
+class ResLayer(LossFunction):
+    def __init__(self, input_shape=None):
+        N = input_shape[1]
+        self.W1 = np.random.randn(N, N)*np.sqrt(2/N)
+        self.W2 = np.random.randn(N, N)*np.sqrt(2/N)
+        self.b = np.zeros([1, input_shape[1]], dtype=np.double)
+
+
+
 class LonelySoftmaxWithReg(LossFunction):
     def __init__(self, dim=None, num_labels=None, reg_param=None):
         self.W = np.random.randn(dim, num_labels)*np.sqrt(2/(dim+1))

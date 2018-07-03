@@ -133,8 +133,10 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
 
     return total_err
 
+
 def epsilon_update(epsilon):
     return EPSILON_UPDATE_FACTOR*epsilon
+
 
 def gradient_test(f,g, x, epsilon0, num_iter = 30, delta=0.1):
     d = np.random.randn(*x.shape)

@@ -6,12 +6,15 @@ from random import randrange
 
 EPSILON_UPDATE_FACTOR = 0.5
 
+
 def jacobianMV(g, x, v):
     gradient_at_x = g(x)
     return np.dot(gradient_at_x.T, v)
 
+
 def epsilon_update(epsilon):
     return EPSILON_UPDATE_FACTOR*epsilon
+
 
 def jacobian_test(f,g, x, epsilon0, num_iter=30, delta=0.1):
     d = np.random.randn(*x.shape)
