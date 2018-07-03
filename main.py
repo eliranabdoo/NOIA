@@ -76,7 +76,6 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     CONVERGENCE_CRITERIA = hyperparams['convergence_criteria']
     GAMMA = hyperparams['gamma']
     REG_PARAM = hyperparams['reg_param']
-	GAMMA = hyperparams['gamma']
 
     sm = LonelySoftmaxWithReg(dim=t_data.shape[1], num_labels=num_labels, reg_param=REG_PARAM)
 
