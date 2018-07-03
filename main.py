@@ -83,12 +83,14 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     loss, grad = sm.calc_loss_and_grad_for_batch(v_data, v_labels)
     f = lambda w: \
         FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(v_data), v_labels, REG_PARAM)[0]
+    g = lambda w: \
+        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(v_data), v_labels, REG_PARAM)[1]
     grad_err = grad_check_sparse(f, sm.get_params_as_matrix(), grad, 10)
     assert grad_err < 0.1
-    jacobian_err = jacobian_test(f,sm.get_params_as_matrix(),epsilon0=0.5,num_iter=20,delta=0.5)
+    jacobian_err = jacobian_test(f,g,sm.get_params_as_matrix(),epsilon0=0.5,num_iter=20,delta=0.5)
     print(["Jacobian total error=",jacobian_err])
 
-    gradient_err = gradient_test(f, sm.get_params_as_matrix(), epsilon0=0.5, num_iter=20, delta=0.5)
+    gradient_err = gradient_test(f,g, sm.get_params_as_matrix(), epsilon0=0.5, num_iter=20, delta=0.5)
     print(["gradient total error=", jacobian_err])
 
 
