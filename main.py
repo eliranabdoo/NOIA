@@ -8,6 +8,8 @@ from softmax import FunctionsBoxes
 from softmax import accuracy
 from gradient_checks import grad_check_sparse
 import itertools
+from gradient_checks import gradient_test
+from jacobian_checks import jacobian_test
 
 
 def generate_all_combinations(grid):
@@ -44,7 +46,7 @@ def main():
         "learning_rate": [0.1, 0.01],
         "decay_rate": [0.1],
         "convergence_criteria": [0.01],
-        "gamma": [0],
+        "gamma": [0.5],
         "reg_param": [0.1]
     }
 
@@ -74,6 +76,7 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     CONVERGENCE_CRITERIA = hyperparams['convergence_criteria']
     GAMMA = hyperparams['gamma']
     REG_PARAM = hyperparams['reg_param']
+	GAMMA = hyperparams['gamma']
 
     sm = LonelySoftmaxWithReg(dim=t_data.shape[1], num_labels=num_labels, reg_param=REG_PARAM)
 
@@ -83,9 +86,15 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
         FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(v_data), v_labels, REG_PARAM)[0]
     grad_err = grad_check_sparse(f, sm.get_params_as_matrix(), grad, 10)
     assert grad_err < 0.1
+    jacobian_err = jacobian_test(f,sm.get_params_as_matrix(),epsilon0=0.5,num_iter=20,delta=0.5)
+    print(["Jacobian total error=",jacobian_err])
 
-    loss_history, accuracy_history = train_with_sgd(sm, t_data=t_data, t_labels=t_labels,
-                                                    convergence_criteria=CONVERGENCE_CRITERIA,
+    gradient_err = gradient_test(f, sm.get_params_as_matrix(), epsilon0=0.5, num_iter=20, delta=0.5)
+    print(["gradient total error=", jacobian_err])
+
+
+
+    loss_history, accuracy_history = train_with_sgd(sm, t_data=t_data, t_labels=t_labels, convergence_criteria=CONVERGENCE_CRITERIA,
                                                     decay_rate=DECAY_RATE,
                                                     batch_size=BATCH_SIZE,
                                                     max_iter=MAX_ITER,

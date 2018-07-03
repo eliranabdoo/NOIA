@@ -5,6 +5,8 @@ import numpy as np
 from random import randrange
 
 
+EPSILON_UPDATE_FACTOR = 0.5
+
 def eval_numerical_gradient(f, x, verbose=True, h=0.00001):
     """
     a naive implementation of numerical gradient of f at x
@@ -130,4 +132,26 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         #print('numerical: %f analytic: %f, relative error: %e' % (grad_numerical, grad_analytic, rel_error))
 
     return total_err
+
+def epsilon_update(epsilon):
+    return EPSILON_UPDATE_FACTOR*epsilon
+
+def gradient_test(f, x, epsilon0, num_iter = 30, delta=0.1):
+    d = np.random.randn(*x.shape)
+    total_err = 0
+    flag = True
+    epsilon = epsilon0
+    #prev_value1 = np.linalg.norm(f(x+epsilon*d)-f(x))
+    grad = eval_numerical_gradient(f, x)
+    prev_value = np.linalg.norm(f(x+epsilon*d)-f(x)-epsilon*np.dot(d.T,grad))
+    for i in range(0, num_iter):
+        epsilon = epsilon_update(epsilon)
+
+        value = np.linalg.norm(f(x+epsilon*d)-f(x)-epsilon*np.dot(d.T,grad))
+        total_err = total_err+value
+        print (["Gradient test iteration ",i,"  :  ", value/prev_value])
+        if value/prev_value > ((EPSILON_UPDATE_FACTOR*EPSILON_UPDATE_FACTOR)+delta):
+            flag = False
+        prev_value= value
+    return total_err, flag
 
