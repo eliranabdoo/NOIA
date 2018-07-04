@@ -17,12 +17,22 @@ class LossFunction:
 
 class ResLayer(LossFunction):
     def __init__(self, input_shape=None):
-        N = input_shape[1]
+        N = input_shape[0]
         self.W1 = np.random.randn(N, N)*np.sqrt(2/N)
         self.W2 = np.random.randn(N, N)*np.sqrt(2/N)
         self.b = np.zeros([1, input_shape[1]], dtype=np.double)
 
+    def calc_value(self, X):
+        """
+        Returns a matrix of size X.shape. Calculates the resnet layer value
+        """
+        pass
 
+    def calc_grad(self, X):
+        """
+        Returns a tuple of the gradient with the following order: (dLayer\dX, dLayer\dW1, dLayer\dW2, dLayer\db)
+        """
+        pass
 
 class LonelySoftmaxWithReg(LossFunction):
     def __init__(self, dim=None, num_labels=None, reg_param=None):
