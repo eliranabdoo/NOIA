@@ -184,7 +184,16 @@ class LonelySoftmaxWithReg(LossFunction):
         return np.column_stack((X, np.ones(X.shape[0])))
 
     def grad_by_x(self, X, y):
-        return np.dot((np.ones(X.shape)-X), X)
+        exp_total_sum = np.exp(np.dot(X.T,self.W[1]))
+        for i in range(1,self.W.shape[0]):
+            exp_total_sum+=np.exp(np.dot(X.T,self.W[i]))
+        exp_total_sum = 1./exp_total_sum
+        diag= np.diag(exp_total_sum)
+        inner_sum =np.dot(diag,np.exp(np.dot(X.T,self.W[0])))-y[0]
+        for i in range(1,self.W.shape[0]):
+            inner_sum = np.dot(diag, np.exp(np.dot(X.T, self.W[i]))) - y[i]
+        result = np.dot(self.W,inner_sum)
+        return result
 
     def predict(self, X):
         return np.argmax(self.add_bias_dimension(X).dot(self.get_params_as_matrix()), axis=1)
