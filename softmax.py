@@ -72,6 +72,39 @@ class ResLayer(LossFunction):
         self.b = b
 
 
+class ResNetwork(LossFunction):
+    def __init__(self, L, input_shape):
+        self.input_shape = input_shape
+        self.L = L
+        self.res_layers = [ResLayer(input_shape) for i in range(0, self.L)]
+        self.softmax = LonelySoftmaxWithReg()
+    def forward_pass(self,X, y):
+        x=X
+        for i in range(0,self.L):
+            x = self.res_layers[i].calc_value(x)
+        self.softmax.update_params(self.res_layers[self.L-1].W1,self.res_layers[self.L-1].W2,self.res_layers[self.L-1].b)
+        loss = self.softmax.calc_loss_and_grad_for_batch(x, y)[0]
+        sum_of_losses = np.sum(loss, axis=0)
+        return sum_of_losses/X.shape[0]
+
+    def backward_pass(self,X , y):
+        gradient = range(0,self.L+1)
+        softmax_gradient= self.softmax.calc_loss_and_grad_for_batch(X , y)[1]
+        gradient_x_mult = softmax_gradient #We need the gradient by X only TODO
+        gradient[self.L] = softmax_gradient #We need gradient by W and b TODO
+        for i in range(1, self.L):
+            gradient_cur_f = self.res_layers[self.L-i].calc_grad(X)
+            cur_gradient = np.vstack(gradient_cur_f[1:4]) #Gradient by layer parameters
+            cur_gradient = np.mat(np.array(cur_gradient) * np.array(gradient_x_mult)) #Element wise matrix multiplication
+            gradient[self.L + 1 - i] = cur_gradient
+            gradient_x_mult = np.mat(np.array(gradient_cur_f[0]) * np.array(gradient_x_mult)) # Multiplication by gradient by x
+        return gradient
+
+
+
+
+
+
 class LonelySoftmaxWithReg(LossFunction):
     def __init__(self, dim=None, num_labels=None, reg_param=None):
         self.W = np.random.randn(dim, num_labels)*np.sqrt(2/(dim+1))
