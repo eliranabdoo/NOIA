@@ -30,13 +30,14 @@ class LossFunction:
     def get_params_as_matrix(self):
         pass
 
-    def update_params(self):
+    def update_params(self, M):
         pass
 
-    def assemble_grad(self, **kwargs):
-        pass
+    def assemble(self, params_list):
+        """ assume the params should be concatenated row wise """
+        return np.vstack(params_list)
 
-    def disassemble_grad(self, P):
+    def disassemble_params(self, P):
         pass
 
 
@@ -48,8 +49,9 @@ class ResLayer(LossFunction):
         self.b = np.zeros([self.N], dtype=np.double)  # Nx1  col vec
 
 
-    def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
+    def calc_value_and_grad(self,X,calc_value=True,calc_grad=True):
         """For now we assume X is a single sample
+        Returns the value, and the grads as a list
          total_dy_dx = np.zeros([self.N, self.N])
         total_dy_dW1 = np.zeros([self.N, self.N**2])
         total_dy_dW2 = np.zeros([self.N, self.N**2])
@@ -74,23 +76,17 @@ class ResLayer(LossFunction):
             dy_dx = dy_db.dot(self.W1) + np.eye(self.N, self.N)
             dy_dW1 = dy_db.dot(xT_kron_I)
             dy_dW2 = np.kron(sig.T, I)
-            grad = self.assemble_grad(dy_db, dy_dx, dy_dW1, dy_dW2)
+            grad = dy_db, dy_dW1, dy_dW2,  dy_dx  # Order is important here
 
         return value, grad
 
-    def assemble_grad(self, b, x, W1, W2):
-        """"""
-        pass
-
-    def disassemble_grad(self, P):
-        """"""
-        pass
-
     def update_params(self, P):
-        pass
+        self.W1 = P[0:self.N]
+        self.b = P[self.N]
+        self.W2 = P[self.N+1:self.N*2]
 
     def get_params_as_matrix(self):
-        return self.assemble_grad(self.b, self.x, self.W1, self.W2)
+        return self.assemble(self.W1, self.b, self.W2)
 
 
 class ResNetwork(LossFunction):
@@ -100,18 +96,26 @@ class ResNetwork(LossFunction):
         self.res_layers = [ResLayer(input_shape) for i in range(0, self.L)]
         self.softmax = LonelySoftmaxWithReg()
 
-    def get_params_as_matrix(self, P):
+    def get_params_as_matrix(self,):
         """ Gets the whole network's parameter matrix """
-        pass
+        params_list = []
+        for layer in self.res_layers:
+            params_list.append(layer.get_params_as_matrix())
+        params_list.append(self.softmax.get_params_as_matrix())
+        return self.assemble(params_list)
 
     def update_params(self, P):
         """ Gets the whole matrix from SGD, and need to update each of its layers properly"""
-        pass
+        N = self.input_shape[1]
+        layer_params_num_rows = 2*N + 1
+        for i in range(0,self.L):
+            self.res_layers[i].update_params(P[i*layer_params_num_rows:(i+1)*layer_params_num_rows])
+        self.softmax.update_params(P[-N-2:])
 
     def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
         """Returns the gradients with only respect to the parameters (without x)"""
         gradient = None
-        if(calc_grad):
+        if calc_grad:
             sum_of_losses = 0
             sum_of_gradients = None
             num_of_samples = X.shape[0]
@@ -119,17 +123,17 @@ class ResNetwork(LossFunction):
                 sample = X[i]
                 label = y[i]
                 x_history = self.forward_pass(sample,label)
-                sum_of_losses+= x_history[-1]
-                cur_gradient = self.backward_pass(sample,label,x_history)
+                sum_of_losses += x_history[-1]
+                cur_gradient = self.backward_pass(sample, label, x_history)
                 if sum_of_gradients is None:
-                    sum_of_gradients=cur_gradient
+                    sum_of_gradients = cur_gradient
                 else:
-                    sum_of_gradients+=cur_gradient
+                    sum_of_gradients += cur_gradient
             gradient = sum_of_gradients / num_of_samples
         loss = None
-        if(calc_value):
+        if calc_value:
             loss = sum_of_losses / num_of_samples
-        return loss , gradient
+        return loss, gradient
 
     def predict(self,X):
         pass
@@ -139,27 +143,29 @@ class ResNetwork(LossFunction):
         x_history = []
         x_history.append(x);
         for i in range(0,self.L):
-            x = self.res_layers[i].calc_value(x)
+            x = self.res_layers[i].calc_value_and_grad(x_history[-1], calc_value=True, calc_grad=False)
             x_history.append(x)
-        loss,_ = self.softmax.calc_value_and_grad(self,x_history[-1],y,calc_value=True,calc_grad=False)
+        #loss, __ = self.softmax.calc_value_and_grad(self, x_history[-1], y, calc_value=True, calc_grad=False)  #TODO refactor
+        loss, __ = self.softmax.calc_loss_and_grad_for_batch(x, y)
         x_history.append(loss)
         return x_history
 
     def backward_pass(self,X , y, x_history): #X is a sample
         """Returns the gradient w.r.t only the parameters"""
         result = range(0,self.L+1)
-        softmax_value , softmax_gradient = self.softmax.calc_value_and_grad(self,x_history[-2],y,calc_value=True,calc_grad=True)
-        gradient_x_product = self.softmax.grad_by_x(x_history[-2])
-        result[self.L] = softmax_gradient #This is the gradient of sofmax only by W and b
+        #softmax_value, softmax_gradient = self.softmax.calc_value_and_grad(x_history[-2], y, calc_value=True, calc_grad=True)  # TODO softmax gradient dimensions are problematic, need to debug!
+        __ , softmax_gradient = self.softmax.calc_loss_and_grad_for_batch(x_history[-2], y)
+        gradient_x_product = self.softmax.grad_by_x(x_history[-2], y)
+        result[self.L] = softmax_gradient.T # TODO check if transpose is needed
         for i in range(1, self.L+1):
             current_layer = self.res_layers[self.L-i]
-            _ ,gradient_cur_f = current_layer[self.L-i].calc_value_and_grad(self, x_history[self.L-i-1], y, calc_value=False, calc_grad=True)
-            dw1, db, dw2, dx = current_layer.disassemble_grad(gradient_cur_f)
-            params_gradient = None
-            cur_gradient = np.dot(gradient_x_product,params_gradient)#Be Careful
-            result[self.L + 1 - i] = cur_gradient
-            gradient_x_product = np.dot(gradient_x_product,dx) # We need to layer gradient by x!!
-        return self.assemble_grad(result)
+            __, dw1, db, dw2, dx = current_layer.calc_value_and_grad(self, x_history[self.L-i-1], calc_value=False, calc_grad=True)
+            params_gradient = self.assemble([dw1.T, db.T, dw2.T])
+            cur_gradient = np.dot(gradient_x_product, params_gradient)  # Be Careful
+            result[self.L + 1 - i] = cur_gradient  # TODO check if transpose is needed
+            gradient_x_product = np.dot(gradient_x_product, dx)  # We need to layer gradient by x!!
+
+        return self.assemble(result)
 
 
 class LonelySoftmaxWithReg(LossFunction):
