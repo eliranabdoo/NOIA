@@ -5,6 +5,7 @@ import scipy.io
 from softmax import LonelySoftmaxWithReg, train_with_sgd
 import matplotlib.pyplot as plt
 from softmax import FunctionsBoxes
+from softmax import ResLayer
 from softmax import accuracy
 from gradient_checks import grad_check_sparse
 import itertools
@@ -25,6 +26,23 @@ def load_data(path):
     num_labels = f.get('Cv').shape[0]
 
     return t_data, t_labels, v_data, v_labels, num_labels
+
+def test():
+    PATH = os.getcwd() + '\datasets\GMMDATA.mat'
+    t_data, t_labels, v_data, v_labels, num_labels = load_data(PATH)
+
+    # Normalize the data
+    mean_image = np.mean(t_data, axis=0)
+    t_data -= mean_image
+    v_data -= mean_image
+    t_data /= np.std(t_data, axis=0)
+    v_data /= np.std(v_data, axis=0)
+
+    test_data = t_data[0:50].T
+    layer = ResLayer(test_data.shape)
+    m = layer.calc_value(test_data)
+    dx, dw1, dw2, db = layer.calc_grad(test_data)
+
 
 
 def main():
@@ -125,4 +143,5 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
 
 
 if __name__ == "__main__":
-    main()
+    #main()
+    test()

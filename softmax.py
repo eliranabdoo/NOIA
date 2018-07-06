@@ -1,8 +1,14 @@
 import numpy as np
 
+
 def accuracy(predictions, labels):
-  return (100.0 * np.sum(predictions ==labels)
+    return (100.0 * np.sum(predictions ==labels)
           / predictions.shape[0])
+
+
+def sigmoid(x, derivative=False):
+    return x*(1-x) if derivative else 1/(1+np.exp(-x))
+
 
 class LossFunction:
     def calc_loss_and_grad_for_batch(self, X, y):
@@ -17,22 +23,54 @@ class LossFunction:
 
 class ResLayer(LossFunction):
     def __init__(self, input_shape=None):
-        N = input_shape[0]
-        self.W1 = np.random.randn(N, N)*np.sqrt(2/N)
-        self.W2 = np.random.randn(N, N)*np.sqrt(2/N)
-        self.b = np.zeros([1, input_shape[1]], dtype=np.double)
+        self.N = input_shape[0]  # dimensionality
+        self.W1 = np.random.randn(self.N, self.N)*np.sqrt(2/self.N)  # NxN mat
+        self.W2 = np.random.randn(self.N, self.N)*np.sqrt(2/self.N)  # NxN mat
+        self.b = np.zeros([self.N], dtype=np.double)  # Nx1  col vec
 
     def calc_value(self, X):
         """
         Returns a matrix of size X.shape. Calculates the resnet layer value
+        X's samples are the columns per se
         """
-        pass
+        return X + self.W2.dot(np.add(self.W1.dot(X).T, self.b).T)
 
     def calc_grad(self, X):
         """
         Returns a tuple of the gradient with the following order: (dLayer\dX, dLayer\dW1, dLayer\dW2, dLayer\db)
         """
-        pass
+        total_dy_dx = np.zeros([self.N, self.N])
+        total_dy_dW1 = np.zeros([self.N, self.N**2])
+        total_dy_dW2 = np.zeros([self.N, self.N**2])
+        total_dy_db =  np.zeros([self.N, self.N])
+        num_samples = X.shape[-1]
+        for i in range(num_samples):
+            x = X[:, i]
+            W1_d_x_p_b = np.add(self.W1.dot(x), self.b)
+            sig = sigmoid(W1_d_x_p_b, False)
+            sig_derivative = np.multiply(sig, 1-sig)
+            #diag_sig_derivative_tensor = np.apply_along_axis(np.diag, 0, sig_derivative)  # NxNxM
+            #diag_sig_derivative_as_mat = np.concatenate([diag_sig_derivative_tensor[:, :, i] for i in range(diag_sig_derivative_tensor.shape[-1])], axis=1)
+            #diag_sig_derviative = np.diagonal(sig_derivative)
+            I = np.eye(self.N, self.N)
+            xT_kron_I = np.kron(x.T, I)
+            #dy_db = self.W2.dot(diag_sig_derviative)
+            dy_db = np.multiply(self.W2, sig_derivative)
+            dy_dx = dy_db.dot(self.W1) + np.eye(self.N, self.N)
+            dy_dW1 = dy_db.dot(xT_kron_I)
+            dy_dW2 = np.kron(sig.T, I)
+
+            total_dy_db += dy_db
+            total_dy_dx += dy_dx
+            total_dy_dW1 += dy_dW1
+            total_dy_dW2 += dy_dW2
+        return total_dy_dx/num_samples, total_dy_dW1/num_samples, total_dy_dW2/num_samples, total_dy_db/num_samples
+
+    def update_params(self, W1, W2, b):
+        self.W1 = W1
+        self.W2 = W2
+        self.b = b
+
 
 class LonelySoftmaxWithReg(LossFunction):
     def __init__(self, dim=None, num_labels=None, reg_param=None):
