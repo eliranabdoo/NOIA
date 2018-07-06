@@ -6,6 +6,7 @@ from softmax import LonelySoftmaxWithReg, train_with_sgd
 import matplotlib.pyplot as plt
 from softmax import FunctionsBoxes
 from softmax import ResLayer
+from softmax import ResNetwork
 from softmax import accuracy
 from gradient_checks import grad_check_sparse
 import itertools
@@ -46,7 +47,8 @@ def test():
 
 
 def main():
-    PATH = os.getcwd()+'\datasets\SwissRollData.mat'
+
+    PATH = os.getcwd()+'\datasets\GMMDATA.mat'
     t_data, t_labels, v_data, v_labels, num_labels = load_data(PATH)
 
     # Normalize the data
@@ -95,7 +97,9 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     GAMMA = hyperparams['gamma']
     REG_PARAM = hyperparams['reg_param']
 
+    """
     sm = LonelySoftmaxWithReg(dim=t_data.shape[1], num_labels=num_labels, reg_param=REG_PARAM)
+
 
     # Perform numerical vs analytical gradient check
     loss, grad = sm.calc_loss_and_grad_for_batch(v_data, v_labels)
@@ -110,8 +114,9 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
 
     gradient_err = gradient_test(f,g, sm.get_params_as_matrix(), epsilon0=0.5, num_iter=20, delta=0.5)
     print(["gradient total error=", jacobian_err])
+    """
 
-
+    sm = ResNetwork(2, t_data.shape, REG_PARAM, num_labels)
 
     loss_history, accuracy_history = train_with_sgd(sm, t_data=t_data, t_labels=t_labels, convergence_criteria=CONVERGENCE_CRITERIA,
                                                     decay_rate=DECAY_RATE,
@@ -143,5 +148,5 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
 
 
 if __name__ == "__main__":
-    #main()
-    test()
+    main()
+    #test()

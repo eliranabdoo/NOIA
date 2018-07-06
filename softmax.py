@@ -33,9 +33,9 @@ class LossFunction:
     def update_params(self, M):
         pass
 
-    def assemble(self, params_list):
+    def assemble(self, *args):
         """ assume the params should be concatenated row wise """
-        return np.vstack(params_list)
+        return np.vstack(args)
 
     def disassemble_params(self, P):
         pass
@@ -43,11 +43,10 @@ class LossFunction:
 
 class ResLayer(LossFunction):
     def __init__(self, input_shape=None):
-        self.N = input_shape[0]  # dimensionality
+        self.N = input_shape[1]  # dimensionality
         self.W1 = np.random.randn(self.N, self.N)*np.sqrt(2/self.N)  # NxN mat
         self.W2 = np.random.randn(self.N, self.N)*np.sqrt(2/self.N)  # NxN mat
         self.b = np.zeros([self.N], dtype=np.double)  # Nx1  col vec
-
 
     def calc_value_and_grad(self,X,calc_value=True,calc_grad=True):
         """For now we assume X is a single sample
@@ -86,15 +85,15 @@ class ResLayer(LossFunction):
         self.W2 = P[self.N+1:self.N*2]
 
     def get_params_as_matrix(self):
-        return self.assemble(self.W1, self.b, self.W2)
+        return self.assemble(self.W1.T, self.b.T, self.W2.T)
 
 
 class ResNetwork(LossFunction):
-    def __init__(self, L, input_shape):
+    def __init__(self, L, input_shape, reg_param, num_labels):
         self.input_shape = input_shape
         self.L = L
         self.res_layers = [ResLayer(input_shape) for i in range(0, self.L)]
-        self.softmax = LonelySoftmaxWithReg()
+        self.softmax = LonelySoftmaxWithReg(dim=input_shape[1], num_labels=num_labels, reg_param=reg_param)
 
     def get_params_as_matrix(self,):
         """ Gets the whole network's parameter matrix """
@@ -102,7 +101,7 @@ class ResNetwork(LossFunction):
         for layer in self.res_layers:
             params_list.append(layer.get_params_as_matrix())
         params_list.append(self.softmax.get_params_as_matrix())
-        return self.assemble(params_list)
+        return self.assemble(*params_list)
 
     def update_params(self, P):
         """ Gets the whole matrix from SGD, and need to update each of its layers properly"""
@@ -143,10 +142,10 @@ class ResNetwork(LossFunction):
         x_history = []
         x_history.append(x);
         for i in range(0,self.L):
-            x = self.res_layers[i].calc_value_and_grad(x_history[-1], calc_value=True, calc_grad=False)
+            x , __ = self.res_layers[i].calc_value_and_grad(x_history[-1], calc_value=True, calc_grad=False)
             x_history.append(x)
         #loss, __ = self.softmax.calc_value_and_grad(self, x_history[-1], y, calc_value=True, calc_grad=False)  #TODO refactor
-        loss, __ = self.softmax.calc_loss_and_grad_for_batch(x, y)
+        loss, __ = self.softmax.calc_loss_and_grad_for_batch(x.reshape(x.shape[0], 1).T, y)
         x_history.append(loss)
         return x_history
 
@@ -154,7 +153,10 @@ class ResNetwork(LossFunction):
         """Returns the gradient w.r.t only the parameters"""
         result = range(0,self.L+1)
         #softmax_value, softmax_gradient = self.softmax.calc_value_and_grad(x_history[-2], y, calc_value=True, calc_grad=True)  # TODO softmax gradient dimensions are problematic, need to debug!
-        __ , softmax_gradient = self.softmax.calc_loss_and_grad_for_batch(x_history[-2], y)
+
+        softmax_input = x_history[-2]
+        softmax_input = softmax_input.reshape(softmax_input.shape[0], 1).T
+        __ , softmax_gradient = self.softmax.calc_loss_and_grad_for_batch(softmax_input, y)
         gradient_x_product = self.softmax.grad_by_x(x_history[-2], y)
         result[self.L] = softmax_gradient.T # TODO check if transpose is needed
         for i in range(1, self.L+1):
@@ -175,7 +177,7 @@ class LonelySoftmaxWithReg(LossFunction):
         self.reg = reg_param
 
     def calc_loss_and_grad_for_batch(self, X, y):
-        return FunctionsBoxes.softmax_loss_and_gradient_regularized(self.get_params_as_matrix(),self.add_bias_dimension(X), y, self.reg)
+        return FunctionsBoxes.softmax_loss_and_gradient_regularized(self.get_params_as_matrix(), self.add_bias_dimension(X), y, self.reg)
 
     def get_params_as_matrix(self):
         return np.vstack((self.W, self.b))
@@ -275,7 +277,9 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
             x_batch = t_data[j * batch_size:(j + 1) * batch_size]
             y_batch = t_labels[j * batch_size:(j + 1) * batch_size]
 
-            cur_loss, grad = loss_function.calc_loss_and_grad_for_batch(x_batch, y_batch)
+            #cur_loss, grad = loss_function.calc_loss_and_grad_for_batch(x_batch, y_batch)  # TODO this is for the softmax, we need to change the softmax's implementation to support the new func
+            cur_loss, grad = loss_function.calc_value_and_grad(x_batch,y_batch, calc_value=True, calc_grad=True)
+
             prev_params = loss_function.get_params_as_matrix()
 
             # Parameter update, change mto momentum\adaGrad
