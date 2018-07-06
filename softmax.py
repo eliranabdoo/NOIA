@@ -135,7 +135,12 @@ class ResNetwork(LossFunction):
         return loss, gradient
 
     def predict(self,X):
-        pass
+        last_layer_batch=[]
+        for i in range(X.shape[0]):
+            x_history=self.forward_pass(X[i],y = None)
+            last_x = x_history[-1]
+            last_layer_batch.append(last_x)
+        return np.argmax(self.add_bias_dimension(last_layer_batch).dot(self.softmax.get_params_as_matrix()), axis=1)
 
     def forward_pass(self,X, y): #X is a sample
         x=X
@@ -145,8 +150,10 @@ class ResNetwork(LossFunction):
             x , __ = self.res_layers[i].calc_value_and_grad(x_history[-1], calc_value=True, calc_grad=False)
             x_history.append(x)
         #loss, __ = self.softmax.calc_value_and_grad(self, x_history[-1], y, calc_value=True, calc_grad=False)  #TODO refactor
-        loss, __ = self.softmax.calc_loss_and_grad_for_batch(x.reshape(x.shape[0], 1).T, y)
-        x_history.append(loss)
+        if y is not None:
+            loss, __ = self.softmax.calc_loss_and_grad_for_batch(x, y)
+            x_history.append(loss)
+
         return x_history
 
     def backward_pass(self,X , y, x_history): #X is a sample
