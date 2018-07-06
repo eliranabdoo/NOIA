@@ -14,6 +14,9 @@ class LossFunction:
     def calc_loss_and_grad_for_batch(self, X, y):
         pass
 
+    def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
+        pass
+
     def get_params_as_matrix(self):
         pass
 
@@ -78,26 +81,52 @@ class ResNetwork(LossFunction):
         self.L = L
         self.res_layers = [ResLayer(input_shape) for i in range(0, self.L)]
         self.softmax = LonelySoftmaxWithReg()
-    def forward_pass(self,X, y):
+    def get_params_as_matrix(self):
+        pass
+    def update_params(self):
+        pass
+    def calc_loss_and_grad_for_batch(self, X, y):
+        sum_of_losses = 0
+        sum_of_gradients = None
+        num_of_samples = X.shape[0]
+        for i in range(0, num_of_samples):
+            sample = X[i]
+            label = y[i]
+            forward_pass_result = self.forward_pass(sample,label)
+            sum_of_losses+= forward_pass_result[0]
+            x_history = forward_pass_result[1]
+            cur_gradient = self.backward_pass(sample,label,x_history)
+            if(sum_of_gradients==None):
+                sum_of_gradients=cur_gradient
+            else:
+                sum_of_gradients+=cur_gradient
+        loss = sum_of_losses/num_of_samples
+        gradient = sum_of_gradients/num_of_samples #TODO
+        return loss , gradient
+
+    def predict(self,X):
+        pass
+
+    def forward_pass(self,X, y): #X is a sample
         x=X
+        x_history = []
+        x_history.append(x);
         for i in range(0,self.L):
             x = self.res_layers[i].calc_value(x)
-        self.softmax.update_params(self.res_layers[self.L-1].W1,self.res_layers[self.L-1].W2,self.res_layers[self.L-1].b)
+            x_history.append(x)
         loss = self.softmax.calc_loss_and_grad_for_batch(x, y)[0]
-        sum_of_losses = np.sum(loss, axis=0)
-        return sum_of_losses/X.shape[0]
+        return loss , x_history
 
-    def backward_pass(self,X , y):
+    def backward_pass(self,X , y, x_history): #X is a sample
         gradient = range(0,self.L+1)
-        softmax_gradient= self.softmax.calc_loss_and_grad_for_batch(X , y)[1]
-        gradient_x_mult = softmax_gradient #We need the gradient by X only TODO
-        gradient[self.L] = softmax_gradient #We need gradient by W and b TODO
-        for i in range(1, self.L):
-            gradient_cur_f = self.res_layers[self.L-i].calc_grad(X)
-            cur_gradient = np.vstack(gradient_cur_f[1:4]) #Gradient by layer parameters
-            cur_gradient = np.mat(np.array(cur_gradient) * np.array(gradient_x_mult)) #Element wise matrix multiplication
+        softmax_value , softmax_gradient = self.softmax.calc_value_and_grad(self,x_history[-1],y,calc_value=True,calc_grad=True)
+        gradient_x_product = self.softmax.grad_by_x(x_history[-1])
+        gradient[self.L] = softmax_gradient #This is the gradient of sofmax only by W and b
+        for i in range(1, self.L+1):
+            _ ,gradient_cur_f = self.res_layers[self.L-i].calc_value_and_grad(self, x_history[self.L-i], y, calc_value=False, calc_grad=True)
+            cur_gradient = np.dot(gradient_cur_f,gradient_x_product)#Be Careful
             gradient[self.L + 1 - i] = cur_gradient
-            gradient_x_mult = np.mat(np.array(gradient_cur_f[0]) * np.array(gradient_x_mult)) # Multiplication by gradient by x
+            gradient_x_product = None # We need to layer gradient by x!!
         return gradient
 
 
@@ -119,6 +148,9 @@ class LonelySoftmaxWithReg(LossFunction):
 
     def add_bias_dimension(self, X):
         return np.column_stack((X, np.ones(X.shape[0])))
+
+    def grad_by_x(self, X, y):
+        return np.dot((np.ones(X.shape)-X),X)
 
     def predict(self, X):
         return np.argmax(self.add_bias_dimension(X).dot(self.get_params_as_matrix()), axis=1)
