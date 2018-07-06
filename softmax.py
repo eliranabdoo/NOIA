@@ -10,9 +10,19 @@ def sigmoid(x, derivative=False):
     return x*(1-x) if derivative else 1/(1+np.exp(-x))
 
 
+def update_learning_rate_simple(learning_rate, decay_rate, iteration):
+    if iteration < 100:
+        return 0.01
+    else:
+        return 0.001
+
+
+def update_learning_rate_step(initial_learning_rate, interval, iteration, drop_rate):
+    return initial_learning_rate * np.power(drop_rate,
+                                     np.floor((1 + iteration) / interval))
+
+
 class LossFunction:
-    def calc_loss_and_grad_for_batch(self, X, y):
-        pass
 
     def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
         pass
@@ -23,6 +33,12 @@ class LossFunction:
     def update_params(self):
         pass
 
+    def assemble_grad(self, **kwargs):
+        pass
+
+    def disassemble_grad(self, P):
+        pass
+
 
 class ResLayer(LossFunction):
     def __init__(self, input_shape=None):
@@ -31,48 +47,50 @@ class ResLayer(LossFunction):
         self.W2 = np.random.randn(self.N, self.N)*np.sqrt(2/self.N)  # NxN mat
         self.b = np.zeros([self.N], dtype=np.double)  # Nx1  col vec
 
-    def calc_value(self, X):
-        """
-        Returns a matrix of size X.shape. Calculates the resnet layer value
-        X's samples are the columns per se
-        """
-        return X + self.W2.dot(np.add(self.W1.dot(X).T, self.b).T)
 
-    def calc_grad(self, X):
-        """
-        Returns a tuple of the gradient with the following order: (dLayer\dX, dLayer\dW1, dLayer\dW2, dLayer\db)
-        """
-        total_dy_dx = np.zeros([self.N, self.N])
+    def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
+        """For now we assume X is a single sample
+         total_dy_dx = np.zeros([self.N, self.N])
         total_dy_dW1 = np.zeros([self.N, self.N**2])
         total_dy_dW2 = np.zeros([self.N, self.N**2])
         total_dy_db =  np.zeros([self.N, self.N])
-        num_samples = X.shape[-1]
-        for i in range(num_samples):
-            x = X[:, i]
-            W1_d_x_p_b = np.add(self.W1.dot(x), self.b)
+        Grad include the gradient w.r.t X as well"""
+        value, grad = None, None
+        W1_d_x_p_b = np.add(self.W1.dot(X).T, self.b).T
+
+        if calc_value:
+            value = X + self.W2.dot(W1_d_x_p_b)
+
+        if calc_grad:
             sig = sigmoid(W1_d_x_p_b, False)
-            sig_derivative = np.multiply(sig, 1-sig)
-            #diag_sig_derivative_tensor = np.apply_along_axis(np.diag, 0, sig_derivative)  # NxNxM
-            #diag_sig_derivative_as_mat = np.concatenate([diag_sig_derivative_tensor[:, :, i] for i in range(diag_sig_derivative_tensor.shape[-1])], axis=1)
-            #diag_sig_derviative = np.diagonal(sig_derivative)
+            sig_derivative = np.multiply(sig, 1 - sig)
+            # diag_sig_derivative_tensor = np.apply_along_axis(np.diag, 0, sig_derivative)  # NxNxM
+            # diag_sig_derivative_as_mat = np.concatenate([diag_sig_derivative_tensor[:, :, i] for i in range(diag_sig_derivative_tensor.shape[-1])], axis=1)
+            # diag_sig_derviative = np.diagonal(sig_derivative)
             I = np.eye(self.N, self.N)
-            xT_kron_I = np.kron(x.T, I)
-            #dy_db = self.W2.dot(diag_sig_derviative)
+            xT_kron_I = np.kron(X.T, I)
+            # dy_db = self.W2.dot(diag_sig_derviative)
             dy_db = np.multiply(self.W2, sig_derivative)
             dy_dx = dy_db.dot(self.W1) + np.eye(self.N, self.N)
             dy_dW1 = dy_db.dot(xT_kron_I)
             dy_dW2 = np.kron(sig.T, I)
+            grad = self.assemble_grad(dy_db, dy_dx, dy_dW1, dy_dW2)
 
-            total_dy_db += dy_db
-            total_dy_dx += dy_dx
-            total_dy_dW1 += dy_dW1
-            total_dy_dW2 += dy_dW2
-        return total_dy_dx/num_samples, total_dy_dW1/num_samples, total_dy_dW2/num_samples, total_dy_db/num_samples
+        return value, grad
 
-    def update_params(self, W1, W2, b):
-        self.W1 = W1
-        self.W2 = W2
-        self.b = b
+    def assemble_grad(self, b, x, W1, W2):
+        """"""
+        pass
+
+    def disassemble_grad(self, P):
+        """"""
+        pass
+
+    def update_params(self, P):
+        pass
+
+    def get_params_as_matrix(self):
+        return self.assemble_grad(self.b, self.x, self.W1, self.W2)
 
 
 class ResNetwork(LossFunction):
@@ -81,10 +99,15 @@ class ResNetwork(LossFunction):
         self.L = L
         self.res_layers = [ResLayer(input_shape) for i in range(0, self.L)]
         self.softmax = LonelySoftmaxWithReg()
-    def get_params_as_matrix(self):
+
+    def get_params_as_matrix(self, P):
+        """ Gets the whole network's parameter matrix """
         pass
-    def update_params(self):
+
+    def update_params(self, P):
+        """ Gets the whole matrix from SGD, and need to update each of its layers properly"""
         pass
+
     def calc_loss_and_grad_for_batch(self, X, y):
         sum_of_losses = 0
         sum_of_gradients = None
@@ -96,7 +119,7 @@ class ResNetwork(LossFunction):
             sum_of_losses+= forward_pass_result[0]
             x_history = forward_pass_result[1]
             cur_gradient = self.backward_pass(sample,label,x_history)
-            if(sum_of_gradients==None):
+            if sum_of_gradients is None:
                 sum_of_gradients=cur_gradient
             else:
                 sum_of_gradients+=cur_gradient
@@ -130,10 +153,6 @@ class ResNetwork(LossFunction):
         return gradient
 
 
-
-
-
-
 class LonelySoftmaxWithReg(LossFunction):
     def __init__(self, dim=None, num_labels=None, reg_param=None):
         self.W = np.random.randn(dim, num_labels)*np.sqrt(2/(dim+1))
@@ -150,7 +169,7 @@ class LonelySoftmaxWithReg(LossFunction):
         return np.column_stack((X, np.ones(X.shape[0])))
 
     def grad_by_x(self, X, y):
-        return np.dot((np.ones(X.shape)-X),X)
+        return np.dot((np.ones(X.shape)-X), X)
 
     def predict(self, X):
         return np.argmax(self.add_bias_dimension(X).dot(self.get_params_as_matrix()), axis=1)
@@ -259,16 +278,3 @@ def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, dec
         #    break
 
     return loss_history, accuracy_history
-
-
-def update_learning_rate_simple(learning_rate, decay_rate, iteration):
-    if iteration < 100:
-        return 0.01
-    else:
-        return 0.001
-
-
-def update_learning_rate_step(initial_learning_rate, interval, iteration, drop_rate):
-    return initial_learning_rate * np.power(drop_rate,
-                                     np.floor((1 + iteration) / interval))
-
