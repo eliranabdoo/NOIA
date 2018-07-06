@@ -108,23 +108,27 @@ class ResNetwork(LossFunction):
         """ Gets the whole matrix from SGD, and need to update each of its layers properly"""
         pass
 
-    def calc_loss_and_grad_for_batch(self, X, y):
-        sum_of_losses = 0
-        sum_of_gradients = None
-        num_of_samples = X.shape[0]
-        for i in range(0, num_of_samples):
-            sample = X[i]
-            label = y[i]
-            forward_pass_result = self.forward_pass(sample,label)
-            sum_of_losses+= forward_pass_result[0]
-            x_history = forward_pass_result[1]
-            cur_gradient = self.backward_pass(sample,label,x_history)
-            if sum_of_gradients is None:
-                sum_of_gradients=cur_gradient
-            else:
-                sum_of_gradients+=cur_gradient
-        loss = sum_of_losses/num_of_samples
-        gradient = sum_of_gradients/num_of_samples #TODO
+    def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
+        """Returns the gradients with only respect to the parameters (without x)"""
+        gradient = None
+        if(calc_grad):
+            sum_of_losses = 0
+            sum_of_gradients = None
+            num_of_samples = X.shape[0]
+            for i in range(0, num_of_samples):
+                sample = X[i]
+                label = y[i]
+                x_history = self.forward_pass(sample,label)
+                sum_of_losses+= x_history[-1]
+                cur_gradient = self.backward_pass(sample,label,x_history)
+                if sum_of_gradients is None:
+                    sum_of_gradients=cur_gradient
+                else:
+                    sum_of_gradients+=cur_gradient
+            gradient = sum_of_gradients / num_of_samples
+        loss = None
+        if(calc_value):
+            loss = sum_of_losses / num_of_samples
         return loss , gradient
 
     def predict(self,X):
@@ -137,20 +141,25 @@ class ResNetwork(LossFunction):
         for i in range(0,self.L):
             x = self.res_layers[i].calc_value(x)
             x_history.append(x)
-        loss = self.softmax.calc_loss_and_grad_for_batch(x, y)[0]
-        return loss , x_history
+        loss,_ = self.softmax.calc_value_and_grad(self,x_history[-1],y,calc_value=True,calc_grad=False)
+        x_history.append(loss)
+        return x_history
 
     def backward_pass(self,X , y, x_history): #X is a sample
-        gradient = range(0,self.L+1)
-        softmax_value , softmax_gradient = self.softmax.calc_value_and_grad(self,x_history[-1],y,calc_value=True,calc_grad=True)
-        gradient_x_product = self.softmax.grad_by_x(x_history[-1])
-        gradient[self.L] = softmax_gradient #This is the gradient of sofmax only by W and b
+        """Returns the gradient w.r.t only the parameters"""
+        result = range(0,self.L+1)
+        softmax_value , softmax_gradient = self.softmax.calc_value_and_grad(self,x_history[-2],y,calc_value=True,calc_grad=True)
+        gradient_x_product = self.softmax.grad_by_x(x_history[-2])
+        result[self.L] = softmax_gradient #This is the gradient of sofmax only by W and b
         for i in range(1, self.L+1):
-            _ ,gradient_cur_f = self.res_layers[self.L-i].calc_value_and_grad(self, x_history[self.L-i], y, calc_value=False, calc_grad=True)
-            cur_gradient = np.dot(gradient_cur_f,gradient_x_product)#Be Careful
-            gradient[self.L + 1 - i] = cur_gradient
-            gradient_x_product = None # We need to layer gradient by x!!
-        return gradient
+            current_layer = self.res_layers[self.L-i]
+            _ ,gradient_cur_f = current_layer[self.L-i].calc_value_and_grad(self, x_history[self.L-i-1], y, calc_value=False, calc_grad=True)
+            dw1, db, dw2, dx = current_layer.disassemble_grad(gradient_cur_f)
+            params_gradient = None
+            cur_gradient = np.dot(gradient_x_product,params_gradient)#Be Careful
+            result[self.L + 1 - i] = cur_gradient
+            gradient_x_product = np.dot(gradient_x_product,dx) # We need to layer gradient by x!!
+        return self.assemble_grad(result)
 
 
 class LonelySoftmaxWithReg(LossFunction):
