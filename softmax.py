@@ -258,7 +258,6 @@ class FunctionsBoxes:
         loss = 0.0
         num_classes = W.shape[1]
         num_train = X.shape[0]
-        dW = np.zeros_like(W)
         scores = X.dot(W)
         scores_exp = np.exp(scores)
         numerical_stab_factors = np.max(scores, axis=1)
