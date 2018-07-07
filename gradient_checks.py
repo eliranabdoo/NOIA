@@ -129,7 +129,7 @@ def grad_check_sparse(f, x, analytic_grad, num_checks=10, h=1e-5):
         grad_analytic = analytic_grad[ix]
         rel_error = abs(grad_numerical - grad_analytic) / (abs(grad_numerical) + abs(grad_analytic))
         total_err += rel_error
-        #print('numerical: %f analytic: %f, relative error: %e' % (grad_numerical, grad_analytic, rel_error))
+        print('numerical: %f analytic: %f, relative error: %e' % (grad_numerical, grad_analytic, rel_error))
 
     return total_err
 
@@ -138,22 +138,22 @@ def epsilon_update(epsilon):
     return EPSILON_UPDATE_FACTOR*epsilon
 
 
-def gradient_test(f,g, x, epsilon0, num_iter = 30, delta=0.1):
-    d = np.random.randn(*x.shape)
+def gradient_test(f, g, x, epsilon0, num_iter = 30, delta=0.1):
+    d = np.random.randn(*x.shape)*(np.sqrt(np.size(x))/2)
     total_err1 = 0
     total_err2 = 0
     flag = True
     epsilon = epsilon0
     grad = g(x)
     prev_value1 = np.linalg.norm(f(x+epsilon*d)-f(x))
-    prev_value2 = np.linalg.norm(f(x+epsilon*d)-f(x)-epsilon*np.dot(d.T,grad))
+    prev_value2 = np.linalg.norm(f(x+epsilon*d)-f(x)-epsilon*np.dot(d.T, grad))
     for i in range(0, num_iter):
         epsilon = epsilon_update(epsilon)
         value1 = np.linalg.norm(f(x + epsilon * d) - f(x))
-        value2 = np.linalg.norm(f(x+epsilon*d)-f(x)-epsilon*np.dot(d.T,grad))
+        value2 = np.linalg.norm(f(x+epsilon*d)-f(x)-epsilon*np.dot(d.T, grad))
         total_err1 = total_err1+value1
         total_err2 = total_err2+value2
-        print (["Gradient test iteration ",i,"  :  ",value1/prev_value1, value2/prev_value2])
+        print (["Gradient test iteration ", i, "  :  ", value1/prev_value1, value2/prev_value2])
         if np.abs(value2/prev_value2 - EPSILON_UPDATE_FACTOR*EPSILON_UPDATE_FACTOR) > delta or np.abs(value1/prev_value1 - EPSILON_UPDATE_FACTOR) > delta:
             flag = False
         prev_value1= value1

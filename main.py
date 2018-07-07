@@ -10,8 +10,7 @@ from softmax import ResNetwork
 from softmax import accuracy
 from gradient_checks import grad_check_sparse
 import itertools
-from gradient_checks import gradient_test
-from jacobian_checks import jacobian_test
+from checks import jacobian_test, gradient_test
 
 
 def generate_all_combinations(grid):
@@ -28,8 +27,9 @@ def load_data(path):
 
     return t_data, t_labels, v_data, v_labels, num_labels
 
+
 def test():
-    PATH = os.getcwd() + '\datasets\GMMDATA.mat'
+    PATH = os.getcwd() + '\datasets\SwissRollData.mat'
     t_data, t_labels, v_data, v_labels, num_labels = load_data(PATH)
 
     # Normalize the data
@@ -45,8 +45,12 @@ def test():
     dx, dw1, dw2, db = layer.calc_grad(test_data)
 
 
-
 def main():
+
+    #run_tests()
+
+    #while True:
+    #    pass
 
     PATH = os.getcwd()+'\datasets\GMMDATA.mat'
     t_data, t_labels, v_data, v_labels, num_labels = load_data(PATH)
@@ -62,12 +66,12 @@ def main():
 
     hyperparams_grid = {
         "max_iter": [50],
-        "batch_size": [10, 100],
-        "learning_rate": [0.1, 0.01],
+        "batch_size": [500],
+        "learning_rate": [0.1],
         "decay_rate": [0.1],
         "convergence_criteria": [0.01],
-        "gamma": [0.5],
-        "reg_param": [0.1]
+        "gamma": [0.7],
+        "reg_param": [0]
     }
 
     max_acc = 0
@@ -84,6 +88,40 @@ def main():
 
     print("Maximal accuracy of %d on validation set, achieved with : %s" % (max_acc, str(best_params)))
 
+def run_tests():
+
+    demo_layer = ResLayer(dim=10)
+    x = np.random.rand(10, 1)*7
+
+    ## Test layer jacobian w.r.t X ##
+    layer_val = lambda x: demo_layer.calc_forward_pass(x)
+    layer_jacobian_vec_x = lambda x, v: demo_layer.calc_backward_pass(x, v)[-1]
+    jacobian_test(layer_val, layer_jacobian_vec_x, x, 10, 20, 0.1)
+    ## Test layer jacobian w.r.t Params ##
+
+
+    #######################################################
+
+    demo_softmax = LonelySoftmaxWithReg(dim=10, num_labels=20, reg_param=0)
+    x = np.random.rand(1, 10)
+    y = np.array([10])
+    w = demo_softmax.get_params_as_matrix()
+
+    ## Test softmax gradient w.r.t X ##
+    sm_x = lambda x: demo_softmax.calc_forward_pass(x, y)
+    sm_gradient_x = lambda x: demo_softmax.grad_by_x(x, y)
+   # gradient_test(sm_x, sm_gradient_x, x, 10, 20, 0.1)
+    ## Test softmax gradient w.r.t Params ##
+    sm_w = lambda w: FunctionsBoxes.softmax_loss_and_gradient_regularized(w, demo_softmax.add_bias_dimension(x), y, 0.1)[0]
+    sm_gradient_params = lambda w: FunctionsBoxes.softmax_loss_and_gradient_regularized(w, demo_softmax.add_bias_dimension(x), y, 0.1)[1]
+    gradient_test(sm_w, sm_gradient_params, w, 0.5, 20, 0.1)
+
+    #######################################################
+    loss, grad = demo_softmax.calc_loss_and_grad_for_batch(x, y)
+    grad_err = grad_check_sparse(sm_w, demo_softmax.get_params_as_matrix(), grad, 10)
+
+
+
 
 def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
 
@@ -97,18 +135,22 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     GAMMA = hyperparams['gamma']
     REG_PARAM = hyperparams['reg_param']
 
-    """
+
     sm = LonelySoftmaxWithReg(dim=t_data.shape[1], num_labels=num_labels, reg_param=REG_PARAM)
 
 
     # Perform numerical vs analytical gradient check
-    loss, grad = sm.calc_loss_and_grad_for_batch(v_data, v_labels)
+
+    data = v_data[0].reshape(1, v_data[0].shape[0])
+    labels = np.array([v_labels[0]])
+    loss, grad = sm.calc_loss_and_grad_for_batch(data, labels)
     f = lambda w: \
-        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(v_data), v_labels, REG_PARAM)[0]
+        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(data), labels, REG_PARAM)[0]
     g = lambda w: \
-        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(v_data), v_labels, REG_PARAM)[1]
+        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(data), labels, REG_PARAM)[1]
     grad_err = grad_check_sparse(f, sm.get_params_as_matrix(), grad, 10)
     assert grad_err < 0.1
+    """
     jacobian_err = jacobian_test(f,g,sm.get_params_as_matrix(),epsilon0=0.5,num_iter=20,delta=0.5)
     print(["Jacobian total error=",jacobian_err])
 
@@ -116,9 +158,17 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     print(["gradient total error=", jacobian_err])
     """
 
-    sm = ResNetwork(2, t_data.shape[1], REG_PARAM, num_labels)
 
-    predictions = sm.predict(v_data)
+
+
+
+
+
+
+
+    sm = ResNetwork(3, t_data.shape[1], REG_PARAM, num_labels)
+
+    #predictions = sm.predict(v_data)
 
     loss_history, accuracy_history = train_with_sgd(sm, t_data=t_data, t_labels=t_labels, convergence_criteria=CONVERGENCE_CRITERIA,
                                                     decay_rate=DECAY_RATE,

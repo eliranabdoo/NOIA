@@ -55,21 +55,21 @@ class ResLayer(LossFunction):
     def calc_backward_pass(self, X, v):
         """If X is a batch, should be of size dimXnum_of_samples, but for now on we assume X is a single value
         Returns the jacobian w.r.t to the parameter transpose dot v,  and the updated v"""
-        assert X.shape[0] == self.self.N
+        #assert X.shape[0] == self.N
         W1_d_x_p_b = np.add(self.W1.dot(X).T, self.b).T
-        sig = sigmoid(W1_d_x_p_b, False)
+        sig = sigmoid(W1_d_x_p_b)
         sig_derivative = np.multiply(sig, 1 - sig)
         dy_db = np.multiply(self.W2, sig_derivative)
         dy_db_t_v = (dy_db).T.dot(v)
         dy_dw2_t_v = v.dot(sig.T)
         dy_dw1_t_v = dy_db_t_v.dot(X.T)
         new_v = (np.eye(self.N, self.N) + dy_db.dot(self.W1)).T.dot(v)
-        return dy_dw1_t_v, dy_db_t_v, dy_dw2_t_v, new_v
+        return dy_dw1_t_v.T, dy_db_t_v.T, dy_dw2_t_v.T, new_v
 
     def update_params(self, P):
         self.W1 = P[0:self.N]
         self.b = P[self.N]
-        self.W2 = P[self.N+1:self.N*2]
+        self.W2 = P[self.N+1:]
 
     def get_params_as_matrix(self):
         return self.assemble(self.W1.T, self.b.T, self.W2.T)
@@ -92,11 +92,11 @@ class ResNetwork(LossFunction):
 
     def update_params(self, P):
         """ Gets the whole matrix from SGD, and need to update each of its layers properly"""
-        N = self.input_shape[1]
+        N = self.dim
         layer_params_num_rows = 2*N + 1
         for i in range(0,self.L):
             self.res_layers[i].update_params(P[i*layer_params_num_rows:(i+1)*layer_params_num_rows])
-        self.softmax.update_params(P[-N-2:])
+        self.softmax.update_params(P[-N-1:])
 
     def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
         """Returns the gradients with only respect to the parameters (without x)"""
@@ -145,8 +145,8 @@ class ResNetwork(LossFunction):
     def backward_pass(self, y, x_history): #X is a sample
         """Returns the network's gradient at x_history[0], y"""
         result = []
-        softmax_input = x_history[-2]
-        __ , softmax_gradient = self.softmax.calc_loss_and_grad_for_batch(softmax_input.T, y)
+        softmax_input = x_history[-2].T
+        __ , softmax_gradient = self.softmax.calc_loss_and_grad_for_batch(softmax_input, y)
         v = self.softmax.grad_by_x(softmax_input, y)  # No transpose is needed as it seems
         result = [softmax_gradient] + result  # perhaps transpose is needed
 
@@ -155,10 +155,10 @@ class ResNetwork(LossFunction):
             input = x_history[-2-i]
             backward_pass_res = current_layer.calc_backward_pass(input, v)
             v = backward_pass_res[-1]
-            cur_gradient = self.assemble(backward_pass_res[0:-1])
+            cur_gradient = self.assemble(*backward_pass_res[0:-1])
             result = [cur_gradient] + result
 
-        return self.assemble(result)
+        return self.assemble(*result)
 
 
 class LonelySoftmaxWithReg(LossFunction):
@@ -177,16 +177,8 @@ class LonelySoftmaxWithReg(LossFunction):
         return np.column_stack((X, np.ones(X.shape[0])))
 
     def grad_by_x(self, X, y):
-        exp_total_sum = np.exp(np.dot(X.T,self.W[1]))
-        for i in range(1,self.W.shape[0]):
-            exp_total_sum+=np.exp(np.dot(X.T,self.W[i]))
-        exp_total_sum = 1./exp_total_sum
-        diag= np.diag(exp_total_sum)
-        inner_sum =np.dot(diag,np.exp(np.dot(X.T,self.W[0])))-y[0]
-        for i in range(1,self.W.shape[0]):
-            inner_sum = np.dot(diag, np.exp(np.dot(X.T, self.W[i]))) - y[i]
-        result = np.dot(self.W,inner_sum)
-        return result
+        """We drop the last row since its representing the artificial addition"""
+        return FunctionsBoxes.calc_grad_by_x(self.get_params_as_matrix(), self.add_bias_dimension(X), y)[0:-1]
 
     def predict(self, X):
         return np.argmax(self.add_bias_dimension(X).dot(self.get_params_as_matrix()), axis=1)
@@ -199,6 +191,24 @@ class LonelySoftmaxWithReg(LossFunction):
         return FunctionsBoxes.calc_forward_pass(self.get_params_as_matrix(), self.add_bias_dimension(X), y, self.reg)
 
 class FunctionsBoxes:
+
+    @staticmethod
+    def calc_grad_by_x(W, X, y):
+        num_classes = W.shape[1]
+        num_train = X.shape[0]
+
+        scores = X.dot(W)
+        scores_exp = np.exp(scores)
+
+        numerical_stab_factors = np.max(scores, axis=1)
+        normalized_scores = np.exp(scores.T - numerical_stab_factors.T).T
+        scores_sums = np.sum(normalized_scores, axis=1)
+        total_scores_mat = (normalized_scores.T / scores_sums.T).T
+        labels_mat = np.zeros_like(scores)
+        labels_mat[np.arange(0, num_train), y] = 1
+
+        return W.dot((total_scores_mat - labels_mat).T)
+
 
     @staticmethod
     def softmax_loss_and_gradient_regularized(W, X, y, reg):
