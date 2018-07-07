@@ -6,8 +6,8 @@ def accuracy(predictions, labels):
           / predictions.shape[0])
 
 
-def sigmoid(x, derivative=False):
-    return x*(1-x) if derivative else 1/(1+np.exp(-x))
+def sigmoid(x):
+    return 1/(1+np.exp(-x))
 
 
 def update_learning_rate_simple(learning_rate, decay_rate, iteration):
@@ -43,41 +43,28 @@ class LossFunction:
 
 class ResLayer(LossFunction):
     def __init__(self, input_shape=None):
-        self.N = input_shape[1]  # dimensionality
+        self.N = input_shape[0]  # dimensionality
         self.W1 = np.random.randn(self.N, self.N)*np.sqrt(2/self.N)  # NxN mat
         self.W2 = np.random.randn(self.N, self.N)*np.sqrt(2/self.N)  # NxN mat
         self.b = np.zeros([self.N], dtype=np.double)  # Nx1  col vec
 
-    def calc_value_and_grad(self,X,calc_value=True,calc_grad=True):
-        """For now we assume X is a single sample
-        Returns the value, and the grads as a list
-         total_dy_dx = np.zeros([self.N, self.N])
-        total_dy_dW1 = np.zeros([self.N, self.N**2])
-        total_dy_dW2 = np.zeros([self.N, self.N**2])
-        total_dy_db =  np.zeros([self.N, self.N])
-        Grad include the gradient w.r.t X as well"""
-        value, grad = None, None
+    def calc_forward_pass(self, X):
+        """If X is a batch, should be of size dimXnum_of_samples"""
+        return X + self.W2.dot((self.W1.dot(X).T + self.b.T).T)
+
+    def calc_backward_pass(self, X, v):
+        """If X is a batch, should be of size dimXnum_of_samples, but for now on we assume X is a single value
+        Returns the jacobian w.r.t to the parameter transpose dot v,  and the updated v"""
+        assert X.shape[0] == self.self.N
         W1_d_x_p_b = np.add(self.W1.dot(X).T, self.b).T
-
-        if calc_value:
-            value = X + self.W2.dot(W1_d_x_p_b)
-
-        if calc_grad:
-            sig = sigmoid(W1_d_x_p_b, False)
-            sig_derivative = np.multiply(sig, 1 - sig)
-            # diag_sig_derivative_tensor = np.apply_along_axis(np.diag, 0, sig_derivative)  # NxNxM
-            # diag_sig_derivative_as_mat = np.concatenate([diag_sig_derivative_tensor[:, :, i] for i in range(diag_sig_derivative_tensor.shape[-1])], axis=1)
-            # diag_sig_derviative = np.diagonal(sig_derivative)
-            I = np.eye(self.N, self.N)
-            xT_kron_I = np.kron(X.T, I)
-            # dy_db = self.W2.dot(diag_sig_derviative)
-            dy_db = np.multiply(self.W2, sig_derivative)
-            dy_dx = dy_db.dot(self.W1) + np.eye(self.N, self.N)
-            dy_dW1 = dy_db.dot(xT_kron_I)
-            dy_dW2 = np.kron(sig.T, I)
-            grad = dy_db, dy_dW1, dy_dW2,  dy_dx  # Order is important here
-
-        return value, grad
+        sig = sigmoid(W1_d_x_p_b, False)
+        sig_derivative = np.multiply(sig, 1 - sig)
+        dy_db = np.multiply(self.W2, sig_derivative)
+        dy_db_t_v = (dy_db).T.dot(v)
+        dy_dw2_t_v = v.dot(sig.T)
+        dy_dw1_t_v = dy_db_t_v.dot(X.T)
+        new_v = (np.eye(self.N, self.N) + dy_db.dot(self.W1)).T.dot(v)
+        return dy_dw1_t_v, dy_db_t_v, dy_dw2_t_v, new_v
 
     def update_params(self, P):
         self.W1 = P[0:self.N]
@@ -142,37 +129,36 @@ class ResNetwork(LossFunction):
             last_layer_batch.append(last_x)
         return np.argmax(self.add_bias_dimension(last_layer_batch).dot(self.softmax.get_params_as_matrix()), axis=1)
 
-    def forward_pass(self,X, y): #X is a sample
-        x=X
+    def forward_pass(self, X, y): #X is a sample
+        """Returns the network's value at X,y"""
+        x = X
         x_history = []
-        x_history.append(x);
+        x_history.append(x)
         for i in range(0,self.L):
-            x , __ = self.res_layers[i].calc_value_and_grad(x_history[-1], calc_value=True, calc_grad=False)
+            x = self.res_layers[i].calc_forward_pass(x_history[-1])
             x_history.append(x)
-        #loss, __ = self.softmax.calc_value_and_grad(self, x_history[-1], y, calc_value=True, calc_grad=False)  #TODO refactor
         if y is not None:
-            loss, __ = self.softmax.calc_loss_and_grad_for_batch(x, y)
+            loss = self.softmax.calc_forward_pass(x, y)
             x_history.append(loss)
 
         return x_history
 
-    def backward_pass(self,X , y, x_history): #X is a sample
-        """Returns the gradient w.r.t only the parameters"""
-        result = range(0,self.L+1)
-        #softmax_value, softmax_gradient = self.softmax.calc_value_and_grad(x_history[-2], y, calc_value=True, calc_grad=True)  # TODO softmax gradient dimensions are problematic, need to debug!
-
+    def backward_pass(self, y, x_history): #X is a sample
+        """Returns the network's gradient at x_history[0], y"""
+        result = []
         softmax_input = x_history[-2]
-        softmax_input = softmax_input.reshape(softmax_input.shape[0], 1).T
+        softmax_input = softmax_input.reshape(softmax_input.shape[0], 1).T  # TODO fix this shit
         __ , softmax_gradient = self.softmax.calc_loss_and_grad_for_batch(softmax_input, y)
-        gradient_x_product = self.softmax.grad_by_x(x_history[-2], y)
-        result[self.L] = softmax_gradient.T # TODO check if transpose is needed
+        v = self.softmax.grad_by_x(softmax_input, y)  # No transpose is needed as it seems
+        result = [softmax_gradient] + result # perhaps transpose is needed
+
         for i in range(1, self.L+1):
             current_layer = self.res_layers[self.L-i]
-            __, dw1, db, dw2, dx = current_layer.calc_value_and_grad(self, x_history[self.L-i-1], calc_value=False, calc_grad=True)
-            params_gradient = self.assemble([dw1.T, db.T, dw2.T])
-            cur_gradient = np.dot(gradient_x_product, params_gradient)  # Be Careful
-            result[self.L + 1 - i] = cur_gradient  # TODO check if transpose is needed
-            gradient_x_product = np.dot(gradient_x_product, dx)  # We need to layer gradient by x!!
+            input = x_history[-2-i]
+            backward_pass_res = current_layer.calc_backward_pass(input, v)
+            v = backward_pass_res[-1]
+            cur_gradient = self.assemble(backward_pass_res[0:-1])
+            result = [cur_gradient] + result
 
         return self.assemble(result)
 
