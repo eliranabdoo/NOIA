@@ -116,7 +116,9 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     print(["gradient total error=", jacobian_err])
     """
 
-    sm = ResNetwork(2, t_data.shape, REG_PARAM, num_labels)
+    sm = ResNetwork(2, t_data.shape[1], REG_PARAM, num_labels)
+
+    predictions = sm.predict(v_data)
 
     loss_history, accuracy_history = train_with_sgd(sm, t_data=t_data, t_labels=t_labels, convergence_criteria=CONVERGENCE_CRITERIA,
                                                     decay_rate=DECAY_RATE,
