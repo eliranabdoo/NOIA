@@ -197,6 +197,8 @@ class LonelySoftmaxWithReg(LossFunction):
         self.b = params[-1]
         self.W = params[0:-1]
 
+    def calc_forward_pass(self,X):
+        return FunctionsBoxes.calc_forward_pass(self.get_params_as_matrix(),self.add_bias_dimension(X), y, self.reg)
 
 class FunctionsBoxes:
 
@@ -232,6 +234,26 @@ class FunctionsBoxes:
         loss += reg * np.sum(W * W)
 
         return loss, dW
+
+    def calc_forward_pass(self,W,X,y,reg):
+        """
+        Softmax loss function, with quadratic regularization
+
+        Output is the calculated loss
+        """
+        loss = 0.0
+        num_classes = W.shape[1]
+        num_train = X.shape[0]
+        scores = X.dot(W)
+        scores_exp = np.exp(scores)
+        numerical_stab_factors = np.max(scores, axis=1)
+        normalized_scores = np.exp(scores.T - numerical_stab_factors.T).T
+        scores_sums = np.sum(normalized_scores, axis=1)
+        class_scores = normalized_scores[np.arange(len(scores_exp)), y.T]
+        loss = np.sum(np.log(scores_sums) + np.log(np.ones(num_train) / class_scores))
+        loss /= num_train
+        loss += reg * np.sum(W * W)
+        return loss
 
 
 def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, decay_rate,
