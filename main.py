@@ -144,12 +144,26 @@ def run_unit(t_data, t_labels, v_data, v_labels, num_labels, **hyperparams):
     data = v_data[0].reshape(1, v_data[0].shape[0])
     labels = np.array([v_labels[0]])
     loss, grad = sm.calc_loss_and_grad_for_batch(data, labels)
-    f = lambda w: \
-        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(data), labels, REG_PARAM)[0]
-    g = lambda w: \
-        FunctionsBoxes.softmax_loss_and_gradient_regularized(w, sm.add_bias_dimension(data), labels, REG_PARAM)[1]
-    grad_err = grad_check_sparse(f, sm.get_params_as_matrix(), grad, 10)
-    assert grad_err < 0.1
+    w=sm.get_params_as_matrix()
+    print(['w shape:',w.shape])
+    f = lambda x: \
+        FunctionsBoxes.calc_value_and_grad(x,v_labels,w.T,REG_PARAM, calc_value=True, calc_grad=False)[0]
+    g = lambda x: \
+        FunctionsBoxes.calc_value_and_grad(x, v_labels, w.T, REG_PARAM, calc_value=False, calc_grad=True)[1]
+
+    gradient_err = gradient_test(f, g, v_data, epsilon0=10, num_iter=20, delta=0.5)
+    print(["gradient total error=", gradient_err])
+
+    f_jacobianmv = lambda x,v: \
+        np.dot(FunctionsBoxes.calc_grad_by_x(w.T, x, v_labels),v)
+ #f, f_jacobianmv, x, epsilon0, num_iter=30, delta=0.1)
+    #jacobian_err = jacobian_test(f, f_jacobianmv,v_data, epsilon0=0.5, num_iter=20, delta=0.5)
+    #print(["Jacobian total error=", jacobian_err])
+
+
+
+    #grad_err = grad_check_sparse(f, sm.get_params_as_matrix(), grad, 10)
+    #assert grad_err < 0.1
     """
     jacobian_err = jacobian_test(f,g,sm.get_params_as_matrix(),epsilon0=0.5,num_iter=20,delta=0.5)
     print(["Jacobian total error=",jacobian_err])

@@ -137,7 +137,7 @@ class ResNetwork(LossFunction):
             x = self.res_layers[i].calc_forward_pass(x_history[-1])
             x_history.append(x)
         if y is not None:
-            loss = self.softmax.calc_forward_pass(x.T, y)
+            loss = self.softmax.calc_forward_pass(x, y)
             x_history.append(loss)
 
         return x_history
@@ -177,7 +177,7 @@ class LonelySoftmaxWithReg(LossFunction):
         return np.column_stack((X, np.ones(X.shape[0])))
 
     def grad_by_x(self, X, y):
-        """We drop the last row since its representing the artificial addition"""
+        """We drop the last row since its representing the artificial addition, samples are on the columns of X"""
         return FunctionsBoxes.calc_grad_by_x(self.get_params_as_matrix(), self.add_bias_dimension(X), y)[0:-1]
 
     def predict(self, X):
@@ -188,7 +188,11 @@ class LonelySoftmaxWithReg(LossFunction):
         self.W = params[0:-1]
 
     def calc_forward_pass(self, X, y):
-        return FunctionsBoxes.calc_forward_pass(self.get_params_as_matrix(), self.add_bias_dimension(X), y, self.reg)
+        return FunctionsBoxes.calc_forward_pass(self.get_params_as_matrix(), self.add_bias_dimension(X.T), y, self.reg)
+
+    def calc_value_and_grad(self,X,y,calc_value=True,calc_grad=True):
+        return FunctionsBoxes.calc_value_and_grad(self,self.add_bias_dimension(X),y,self.get_params_as_matrix(),reg=self.reg,calc_value=calc_value,calc_grad=calc_grad)
+
 
 class FunctionsBoxes:
 
@@ -209,6 +213,27 @@ class FunctionsBoxes:
 
         return W.dot((total_scores_mat - labels_mat).T)
 
+
+    @staticmethod
+    def calc_gradient_regularized(W, X, y, reg):
+        """
+        Returns the softmax gradient w.r.t the parameters
+        """
+        num_train = X.shape[0]
+        dW = np.zeros_like(W)
+        print (['x shape:',X.shape," w shape:",W.shape])
+        scores = X.dot(W)
+        scores_exp = np.exp(scores)
+        numerical_stab_factors = np.max(scores, axis=1)
+        normalized_scores = np.exp(scores.T - numerical_stab_factors.T).T
+        scores_sums = np.sum(normalized_scores, axis=1)
+        total_scores_mat = (normalized_scores.T / scores_sums.T).T
+        labels_mat = np.zeros_like(scores)
+        labels_mat[np.arange(0, num_train), y] = 1
+        dW += (X.T).dot(total_scores_mat - labels_mat)
+        dW /= num_train
+        dW += (2 * reg) * W
+        return dW
 
     @staticmethod
     def softmax_loss_and_gradient_regularized(W, X, y, reg):
@@ -243,6 +268,8 @@ class FunctionsBoxes:
 
         return loss, dW
 
+
+
     @staticmethod
     def calc_forward_pass(W,X,y,reg):
         """
@@ -263,6 +290,17 @@ class FunctionsBoxes:
         loss /= num_train
         loss += reg * np.sum(W * W)
         return loss
+
+    @staticmethod
+    def calc_value_and_grad(X,y,W,reg, calc_value=True, calc_grad=True):
+        loss= None
+        if calc_value:
+            loss = FunctionsBoxes.calc_forward_pass(W,X,y,reg)
+        grad= None
+        if calc_grad:
+            grad= FunctionsBoxes.calc_gradient_regularized(W, X, y, reg)
+        return loss,grad
+
 
 
 def train_with_sgd(loss_function, t_data, t_labels, max_iter, learning_rate, decay_rate,
